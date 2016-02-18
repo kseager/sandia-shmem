@@ -48,7 +48,7 @@
 #define FALSE (0)
 #define INIT_VALUE 1
 
-#define MAX_MSG_SIZE (1<<22)
+#define MAX_MSG_SIZE (1<<23)
 #define START_LEN 1
 
 #define INC 2
@@ -62,7 +62,7 @@ typedef struct perf_metrics {
    int mega, warmup;
 } perf_metrics_t;
 
-void pingpong_p(int *pingpong_ball, perf_metrics_t data,
+void pingpong_p(long *pingpong_ball, perf_metrics_t data,
                 int my_node, int npes);
 void ping_put(char *buf, int len, perf_metrics_t data, int my_node);
 
@@ -163,7 +163,7 @@ int main(int argc, char *argv[])
 {
     int len;
     int my_node, num_pes;
-    int *pingpong_ball;
+    long *pingpong_ball;
     char * buf = NULL;
     perf_metrics_t data;
     data_init(&data);
@@ -174,7 +174,7 @@ int main(int argc, char *argv[])
 
     if (num_pes != 2) {
         if (my_node == 0) {
-            fprintf(stderr, "Currently only 2-node test\n");
+            fprintf(stderr, "2-nodes only test\n");
         }
         shmem_finalize();
         exit(77);
@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
     /* init data */
     command_line_arg_check(argc, argv, &data, my_node);
     buf = buffer_alloc_and_init(data.max_len);
-    pingpong_ball = shmem_malloc(sizeof(int));
+    pingpong_ball = shmem_malloc(sizeof(long));
     *pingpong_ball = INIT_VALUE;
 
     if(my_node == 0)
@@ -197,17 +197,15 @@ int main(int argc, char *argv[])
 /**************************************************************/
 
     if (my_node == 0) {
-        printf("\nPing-Pong shmem_int_p results:\n");
+        printf("\nPing-Pong shmem_long_p results:\n");
         print_results_header(data.mega);
     }
 
     pingpong_p(pingpong_ball, data, my_node, num_pes);
 
-
 /**************************************************************/
 /*                   PING over varying message sizes          */
 /**************************************************************/
-
 
     if (my_node == 0) {
        printf("\nPing shmem_putmem results:\n");
@@ -230,40 +228,48 @@ int main(int argc, char *argv[])
 }  /* end of main() */
 
 
+void static inline calc_and_print_results(double start, double end,
+                                        perf_metrics_t data, int len)
+{
+    data.latency = (end - start) / data.trials;
+
+    if ((end - start) != 0 ) {
+        data.bandwidth = len / ((end - start) * data.trials);
+    } else {
+        data.bandwidth = 0.0;
+    }
+
+    print_data_results(data, len);
+}
+
 void
-pingpong_p(int * pingpong_ball, perf_metrics_t data, int my_node, int npes)
+pingpong_p(long * pingpong_ball, perf_metrics_t data, int my_node, int npes)
 {
     double start, end;
-    int dest = (my_node + 1) % npes, tmp, i = 0;
+    long tmp;
+    int dest = (my_node + 1) % npes, i = 0;
     tmp = *pingpong_ball = INIT_VALUE;
 
     shmem_barrier_all();
 
     if (my_node == 0) {
-
         for (i = 0; i < data.trials + data.warmup; i++) {
             if(i == data.warmup)
                 start = shmemx_wtime();
 
-            shmem_int_p(pingpong_ball, ++tmp, dest);
+            shmem_long_p(pingpong_ball, ++tmp, dest);
 
-            shmem_int_wait(pingpong_ball, tmp);
+            shmem_long_wait(pingpong_ball, tmp);
         }
         end = shmemx_wtime();
 
-        data.latency = (end - start) / data.trials;
+        calc_and_print_results(start, end, data, sizeof(long));
 
-        if ((end - start) != 0 ) {
-            data.bandwidth = sizeof(int) / ((end - start) * data.trials);
-        } else {
-            data.bandwidth = 0.0;
-        }
-        print_data_results(data, sizeof(int));
    } else {
         for (i = 0; i < data.trials + data.warmup; i++) {
-            shmem_int_wait(pingpong_ball, ++tmp);
+            shmem_long_wait(pingpong_ball, ++tmp);
 
-            shmem_int_p(pingpong_ball, tmp, dest);
+            shmem_long_p(pingpong_ball, tmp, dest);
         }
    }
 
@@ -288,13 +294,6 @@ ping_put(char * buf, int len, perf_metrics_t data, int my_node)
         }
         end = shmemx_wtime();
 
-        data.latency = (end - start) / data.trials;
-
-        if ((end - start) != 0 ) {
-            data.bandwidth = len / ((end - start) * data.trials);
-        } else {
-            data.bandwidth = 0.0;
-        }
-        print_data_results(data, len);
+        calc_and_print_results(start, end, data, len);
     }
 } /* latency/bw for one-way trip */
