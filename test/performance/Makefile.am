@@ -17,13 +17,13 @@ if ENABLE_LENGTHY_TESTS
 TESTS += \
 	shmemlatency \
 	msgrate \
-	shmem_put_perf \
+	shmem_latency_put_perf \
 	shmem_bw_put_perf
 else
 check_PROGRAMS += \
-        shmemlatency \
+	shmemlatency \
 	msgrate \
-	shmem_put_perf \
+	shmem_latency_put_perf \
 	shmem_bw_put_perf
 endif
 
@@ -38,5 +38,7 @@ shmemlatency_SOURCES = shmemlatency.c
 
 msgrate_SOURCES = msgrate.c
 
-shmem_put_perf_SOURCES = shmem_put_perf.c
+shmem_latency_put_perf_SOURCES = shmem_latency_put_perf.c
+
+shmem_bw_put_perf_SOURCES = shmem_bw_put_perf.c
 

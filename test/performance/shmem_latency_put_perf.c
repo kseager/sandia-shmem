@@ -24,13 +24,13 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
 **
-**  This is a latency and bandwidth test for put derived from shmemlatency
+**  This is a latency test for put derived from shmemlatency
 **
 **  Notice: micro benchmark ~ two nodes only
 **
 **  Features of Test:
-**  1) small put pingpong test latency and bandwidth
-**  2) one sided latency test to calculate latency and bandwidth of various sizes
+**  1) small put pingpong latency test
+**  2) one sided latency test to calculate latency of various sizes
 **    to the network stack
 **
 */
@@ -49,7 +49,7 @@
 #define WARMUP 10
 
 typedef struct perf_metrics {
-   double latency, bandwidth;
+   double latency;
    int start_len, max_len;
    int inc, trials;
    int mega, warmup;
@@ -62,7 +62,6 @@ void ping_put(char *buf, int len, perf_metrics_t data, int my_node);
 
 void data_init(perf_metrics_t * data) {
    data->latency = 0.0;
-   data->bandwidth = 0.0;
    data->start_len = START_LEN;
    data->max_len = MAX_MSG_SIZE;
    data->inc = INC;
@@ -73,26 +72,13 @@ void data_init(perf_metrics_t * data) {
 }
 
 void print_data_results(perf_metrics_t data, int len) {
-   printf("%9d           %8.2f             ",
+   printf("%9d           %8.2f             \n",
           len, data.latency * 1000000.0);
-   if (data.mega) {
-      printf("         %8.2f         \n",
-            (data.bandwidth / (1024 * 1024)));
-      } else {
-         printf("         %8.2f         \n",
-                (data.bandwidth / 1000000.0));
-      }
 }
 
 void print_results_header(int mega) {
-   printf("\nLength                  Latency                       "\
-          "Bandwidth\n");
-   printf("in bytes            in micro seconds              ");
-   if (mega) {
-      printf("in mega bytes per second\n");
-   } else {
-      printf("in million bytes per second\n");
-   }
+   printf("\nLength                  Latency                       \n");
+   printf("in bytes            in micro seconds              \n");
 }
 
 void command_line_arg_check(int argc, char *argv[],
@@ -218,12 +204,6 @@ void static inline calc_and_print_results(double start, double end,
                                         perf_metrics_t data, int len)
 {
     data.latency = (end - start) / data.trials;
-
-    if ((end - start) != 0 ) {
-        data.bandwidth = len / ((end - start) * data.trials);
-    } else {
-        data.bandwidth = 0.0;
-    }
 
     print_data_results(data, len);
 }
