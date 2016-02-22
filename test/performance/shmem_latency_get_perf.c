@@ -35,17 +35,17 @@
 
 #include <latency_common.h>
 
-void pingpong_p(long *pingpong_ball, perf_metrics_t data,
+void round_trp_latency_get(long *target, perf_metrics_t data,
                 int my_node, int npes);
-void ping_put(char *buf, int len, perf_metrics_t data, int my_node);
 
-
+void round_trp_latency_getmem(char *buf, int len, perf_metrics_t data,
+                int my_node);
 
 int main(int argc, char *argv[])
 {
     int len;
-    int my_node, num_pes;
-    long *pingpong_ball;
+    int my_node, num_pes, partner_pe;
+    long *target;
     char * buf = NULL;
     perf_metrics_t data;
     data_init(&data);
@@ -57,11 +57,12 @@ int main(int argc, char *argv[])
     only_two_PEs_check(my_node, num_pes);
 
     /* init data */
+    partner_pe = partner_node(my_node);
     command_line_arg_check(argc, argv, &data, my_node);
     buf = aligned_buffer_alloc(data.max_len);
     init_array(buf, data.max_len, my_node);
-    pingpong_ball = shmem_malloc(sizeof(long));
-    *pingpong_ball = INIT_VALUE;
+    target = shmem_malloc(sizeof(long));
+    *target = my_node;
 
     if(my_node == 0)
        printf("\nResults for %d trials each of length %d through %d in"\
@@ -70,22 +71,28 @@ int main(int argc, char *argv[])
 
 
 /**************************************************************/
-/*                   PINGPONG with small put                  */
+/*                   Latency: shmem_long_g                    */
 /**************************************************************/
 
     if (my_node == 0) {
-        printf("\nPing-Pong shmem_long_p results:\n");
+        printf("\nshmem_long_g results:\n");
         print_results_header(data.mega);
     }
 
-    pingpong_p(pingpong_ball, data, my_node, num_pes);
+    round_trp_latency_get(target, data, my_node, num_pes);
+
+    if((my_node == 0) && data.validate) {
+        if(*target != partner_pe)
+            printf("validation error shmem_long_g target = %ld != %d\n", *target,
+                    partner_pe);
+    }
 
 /**************************************************************/
-/*                   PING over varying message sizes          */
+/*                   Latency: shmem_getmem                    */
 /**************************************************************/
 
     if (my_node == 0) {
-       printf("\nPing shmem_putmem results:\n");
+       printf("\nshmem_getmem results:\n");
        print_results_header(data.mega);
     }
 
@@ -93,15 +100,15 @@ int main(int argc, char *argv[])
 
         shmem_barrier_all();
 
-        ping_put(buf, len, data, my_node);
+        round_trp_latency_getmem(buf, len, data, my_node);
 
         shmem_barrier_all();
     }
 
     shmem_barrier_all();
 
-    if((my_node % 2 != 0) && data.validate)
-        validate_recv(buf, data.max_len, partner_node(my_node));
+    if((my_node == 0) && data.validate)
+        validate_recv(buf, data.max_len, partner_pe);
 
     shmem_finalize();
     return 0;
@@ -109,12 +116,11 @@ int main(int argc, char *argv[])
 
 
 void
-pingpong_p(long * pingpong_ball, perf_metrics_t data, int my_node, int npes)
+round_trp_latency_get(long * target, perf_metrics_t data, int my_node,
+                int npes)
 {
     double start, end;
-    long tmp;
-    int dest = (my_node + 1) % npes, i = 0;
-    tmp = *pingpong_ball = INIT_VALUE;
+    int dest = 1, i = 0;
 
     shmem_barrier_all();
 
@@ -123,27 +129,17 @@ pingpong_p(long * pingpong_ball, perf_metrics_t data, int my_node, int npes)
             if(i == data.warmup)
                 start = shmemx_wtime();
 
-            shmem_long_p(pingpong_ball, ++tmp, dest);
-
-            shmem_long_wait_until(pingpong_ball, SHMEM_CMP_EQ, tmp);
+            *target = shmem_long_g(target, dest);
         }
         end = shmemx_wtime();
 
         calc_and_print_results(start, end, data, sizeof(long));
-
-   } else {
-        for (i = 0; i < data.trials + data.warmup; i++) {
-            shmem_long_wait_until(pingpong_ball, SHMEM_CMP_EQ, ++tmp);
-
-            shmem_long_p(pingpong_ball, tmp, dest);
-        }
    }
-
 } /*gauge small put pathway round trip latency*/
 
 
 void
-ping_put(char * buf, int len, perf_metrics_t data, int my_node)
+round_trp_latency_getmem(char * buf, int len, perf_metrics_t data, int my_node)
 {
     double start, end;
     int i = 0;
@@ -154,9 +150,7 @@ ping_put(char * buf, int len, perf_metrics_t data, int my_node)
             if(i == data.warmup)
                 start = shmemx_wtime();
 
-            shmem_putmem(buf, buf, len, 1 );
-            shmem_quiet();
-
+            shmem_getmem(buf, buf, len, 1);
         }
         end = shmemx_wtime();
 
