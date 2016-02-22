@@ -35,14 +35,7 @@
 **
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <shmem.h>
-#include <shmemx.h>
-#include <string.h>
-
-#define SIZE (10000000)
+#include <common.h>
 
 #define TRUE (1)
 #define FALSE (0)
@@ -60,6 +53,7 @@ typedef struct perf_metrics {
    int start_len, max_len;
    int inc, trials;
    int mega, warmup;
+   int validate;
 } perf_metrics_t;
 
 void pingpong_p(long *pingpong_ball, perf_metrics_t data,
@@ -75,6 +69,7 @@ void data_init(perf_metrics_t * data) {
    data->trials = TRIALS;
    data->mega = TRUE;
    data->warmup = WARMUP; /*number of initial iterations to skip*/
+   data->validate = FALSE;
 }
 
 void print_data_results(perf_metrics_t data, int len) {
@@ -100,29 +95,13 @@ void print_results_header(int mega) {
    }
 }
 
-char * buffer_alloc_and_init(int len) {
-    unsigned long page_align;
-    char *buf;
-    int i;
-
-    page_align = getpagesize();
-    buf = shmem_malloc(len + page_align);
-    buf = (char *) (((unsigned long) buf + (page_align - 1)) /
-                    page_align * page_align);
-
-    for(i = 0; i < len; i++)
-       buf[i] = 'z';
-
-    return buf;
-}
-
 void command_line_arg_check(int argc, char *argv[],
                             perf_metrics_t *metric_info, int my_node) {
     int ch, error = FALSE;
     extern char *optarg;
 
     /* check command line args */
-    while ((ch = getopt(argc, argv, "i:e:s:n:m")) != EOF) {
+    while ((ch = getopt(argc, argv, "i:e:s:n:mv")) != EOF) {
         switch (ch) {
         case 'i':
             metric_info->inc = strtol(optarg, (char **)NULL, 0);
@@ -141,6 +120,9 @@ void command_line_arg_check(int argc, char *argv[],
         case 'm':
             metric_info->mega = FALSE;
             break;
+        case 'v':
+            metric_info->validate = TRUE;
+            break;
         default:
             error = TRUE;
             break;
@@ -152,7 +134,7 @@ void command_line_arg_check(int argc, char *argv[],
             fprintf(stderr, "Usage: %s [-s start_length] [-e end_length] "\
                     ": lengths must be a power of two \n " \
                     "[-i inc] [-n trials (must be greater than 20)] "\
-                    "[-m (millions)]\n", argv[0]);
+                    "[-m (millions)] [-v (validate results)]\n", argv[0]);
         }
         shmem_finalize();
         exit (-1);
@@ -182,7 +164,8 @@ int main(int argc, char *argv[])
 
     /* init data */
     command_line_arg_check(argc, argv, &data, my_node);
-    buf = buffer_alloc_and_init(data.max_len);
+    buf = aligned_buffer_alloc(data.max_len);
+    init_array(buf, data.max_len, my_node);
     pingpong_ball = shmem_malloc(sizeof(long));
     *pingpong_ball = INIT_VALUE;
 
@@ -223,6 +206,9 @@ int main(int argc, char *argv[])
 
     shmem_barrier_all();
 
+    if((my_node % 2 != 0) && data.validate)
+        validate_recv(buf, data.max_len, partner_node(my_node));
+
     shmem_finalize();
     return 0;
 }  /* end of main() */
@@ -259,7 +245,7 @@ pingpong_p(long * pingpong_ball, perf_metrics_t data, int my_node, int npes)
 
             shmem_long_p(pingpong_ball, ++tmp, dest);
 
-            shmem_long_wait(pingpong_ball, tmp);
+            shmem_long_wait_until(pingpong_ball, SHMEM_CMP_EQ, tmp);
         }
         end = shmemx_wtime();
 
@@ -267,7 +253,7 @@ pingpong_p(long * pingpong_ball, perf_metrics_t data, int my_node, int npes)
 
    } else {
         for (i = 0; i < data.trials + data.warmup; i++) {
-            shmem_long_wait(pingpong_ball, ++tmp);
+            shmem_long_wait_until(pingpong_ball, SHMEM_CMP_EQ, ++tmp);
 
             shmem_long_p(pingpong_ball, tmp, dest);
         }

@@ -34,19 +34,13 @@
 **
 **  -by default megabytes/second results
 **
+**NOTE: this test assumes correctness of reduction algorithm
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <shmem.h>
-#include <shmemx.h>
-#include <string.h>
+#include <common.h>
 
 #define MAX_MSG_SIZE (1<<23)
 #define START_LEN 1
-
-#define CEIL(num) (((num) % 2 == 0) ? (num) : ((num) + 1))
 
 #define INC 2
 #define TRIALS 100
@@ -76,6 +70,7 @@ typedef struct perf_metrics {
     int start_len, max_len;
     int size_inc, trials;
     int window_size, warmup;
+    int validate;
     bw_units unit;
 } perf_metrics_t;
 
@@ -87,6 +82,7 @@ void bi_dir_bw(char *buf, char *buf2, int len, perf_metrics_t metric_info,
 void uni_dir_bw(char * buf, int len, perf_metrics_t metric_info,
                 int my_node, int npes);
 
+/*default settings if no input is provided */
 void data_init(perf_metrics_t * data) {
     data->start_len = START_LEN;
     data->max_len = MAX_MSG_SIZE;
@@ -95,6 +91,7 @@ void data_init(perf_metrics_t * data) {
     data->window_size = WINDOW_SIZE; /*back-to-back msg stream*/
     data->warmup = WARMUP; /*number of initial iterations to skip*/
     data->unit = MB;
+    data->validate = FALSE;
 }
 
 void print_data_results(double bw, double mr, perf_metrics_t data, int len) {
@@ -136,19 +133,21 @@ void print_results_header(output_types type, perf_metrics_t metric_info,
     printf("         in messages/seconds\n");
 }
 
+
 void command_line_arg_check(int argc, char *argv[],
                             perf_metrics_t *metric_info, int my_node) {
     int ch, error = FALSE;
     extern char *optarg;
 
     /* check command line args */
-    while ((ch = getopt(argc, argv, "i:e:s:n:kb")) != EOF) {
+    while ((ch = getopt(argc, argv, "i:e:s:n:kbv")) != EOF) {
         switch (ch) {
         case 'i':
             metric_info->size_inc = strtol(optarg, (char **)NULL, 0);
             break;
         case 'e':
             metric_info->max_len = strtol(optarg, (char **)NULL, 0);
+            if(!is_divisible_by_4(metric_info->max_len)) error = TRUE;
             break;
         case 's':
             metric_info->start_len = strtol(optarg, (char **)NULL, 0);
@@ -164,6 +163,9 @@ void command_line_arg_check(int argc, char *argv[],
         case 'b':
             metric_info->unit = B;
             break;
+        case 'v':
+            metric_info->validate = TRUE;
+            break;
         default:
             error = TRUE;
             break;
@@ -173,29 +175,14 @@ void command_line_arg_check(int argc, char *argv[],
     if (error) {
         if (my_node == 0) {
             fprintf(stderr, "Usage: [-s start_length] [-e end_length] "\
-                    ": lengths should be a power of two \n " \
+                    ": lengths should be divisible by four \n " \
                     "[-i inc] [-n trials (must be greater than 20)] "\
-                    "[-k (kilobytes/second)] [-b (bytes/second)] \n");
+                    "[-k (kilobytes/second)] [-b (bytes/second)] "\
+                    "[-v (validate data stream)] \n");
         }
         shmem_finalize();
         exit (-1);
     }
-}
-
-char * buffer_alloc_and_init(int len) {
-    unsigned long page_align;
-    char *buf;
-    int i;
-
-    page_align = getpagesize();
-    buf = shmem_malloc(len + page_align);
-    buf = (char *) (((unsigned long) buf + (page_align - 1)) /
-            page_align * page_align);
-
-    for(i = 0; i < len; i++)
-        buf[i] = 'z';
-
-    return buf;
 }
 
 
@@ -209,6 +196,14 @@ int main(int argc, char *argv[])
     my_node = shmem_my_pe();
     num_pes = shmem_n_pes();
 
+    if (num_pes % 2 != 0) {
+        if (my_node == 0) {
+            fprintf(stderr, "can only use an even number of nodes\n");
+        }
+        shmem_finalize();
+        exit(77);
+    }
+
     /* initialize all data */
     data_init(&metric_info);
 
@@ -217,8 +212,10 @@ int main(int argc, char *argv[])
 
     command_line_arg_check(argc, argv, &metric_info, my_node);
 
-    buf  = buffer_alloc_and_init(metric_info.max_len);
-    buf2 = buffer_alloc_and_init(metric_info.max_len);
+    buf  = aligned_buffer_alloc(metric_info.max_len);
+    init_array(buf, metric_info.max_len, my_node);
+    buf2 = aligned_buffer_alloc(metric_info.max_len);
+    init_array(buf2, metric_info.max_len, my_node);
 
 /**************************************************************/
 /*                   Bi-Directional BW                        */
@@ -233,6 +230,13 @@ int main(int argc, char *argv[])
         bi_dir_bw(buf, buf2, len, metric_info, my_node, num_pes);
     }
 
+    if(metric_info.validate) {
+        if(my_node % 2 == 0)
+            validate_recv(buf2, metric_info.max_len, partner_node(my_node));
+        else
+            validate_recv(buf, metric_info.max_len, partner_node(my_node));
+    }
+
 /**************************************************************/
 /*                   UNI-Directional BW                       */
 /**************************************************************/
@@ -240,11 +244,17 @@ int main(int argc, char *argv[])
     if (my_node == 0)
         print_results_header(UNI_DIR, metric_info, num_pes);
 
+    /*reset array*/
+    init_array(buf, metric_info.max_len, my_node);
+
     for (len = metric_info.start_len; len <= metric_info.max_len;
         len *= metric_info.size_inc) {
 
         uni_dir_bw(buf, len, metric_info, my_node, num_pes);
     }
+
+    if((my_node % 2 != 0) && metric_info.validate)
+        validate_recv(buf, metric_info.max_len, partner_node(my_node));
 
     shmem_barrier_all();
 
@@ -260,7 +270,7 @@ void static inline calc_and_print_results(double total_t, double bw,
                         int len, perf_metrics_t metric_info, int my_node,
                         int npes)
 {
-    int num_even_PEs = CEIL(npes)/2, start_pe = 0, stride_only_even_pes = 1;
+    int num_even_PEs = npes/2, start_pe = 0, stride_only_even_pes = 1;
     static double pe_bw_sum;
     double pe_bw_avg = 0.0, pe_mr_avg = 0.0;
     int nred_elements = 1;
@@ -289,12 +299,14 @@ void static inline calc_and_print_results(double total_t, double bw,
 
 }
 
+/*even PE's put to their odd counterpart (my_node + 1), which does a put back to them
+ * at the same time*/
 void
 bi_dir_bw(char *buf, char *buf2, int len, perf_metrics_t metric_info, int my_node,
           int npes)
 {
     double start = 0.0, end = 0.0;
-    int dest = (my_node + 1) % npes;
+    int dest = partner_node(my_node);
     int i = 0, j = 0;
     static double bw = 0.0; /*must be symmetric for reduction*/
 
@@ -326,14 +338,14 @@ bi_dir_bw(char *buf, char *buf2, int len, perf_metrics_t metric_info, int my_nod
 
 }
 
-
+/*only even PE's put to my_node + 1*/
 void
 uni_dir_bw(char * buf, int len, perf_metrics_t metric_info, int my_node,
          int npes)
 {
     double start = 0.0, end = 0.0;
     int i = 0, j = 0;
-    int dest = (my_node + 1) % npes;
+    int dest = partner_node(my_node);
     static double bw = 0.0; /*must be symmetric for reduction*/
 
     shmem_barrier_all();
