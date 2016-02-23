@@ -18,11 +18,6 @@
 #define FALSE (0)
 
 typedef enum {
-    BI_DIR,
-    UNI_DIR
-} output_types;
-
-typedef enum {
     B,
     KB,
     MB
@@ -36,6 +31,7 @@ typedef struct perf_metrics {
     int my_node, num_pes;
     bw_units unit;
     char *buf, *buf2;
+    const char *bw_type;
 } perf_metrics_t;
 
 long red_psync[_SHMEM_REDUCE_SYNC_SIZE];
@@ -56,44 +52,16 @@ void data_init(perf_metrics_t * data) {
     data->buf2 = NULL;
 }
 
-void print_data_results(double bw, double mr, perf_metrics_t data, int len) {
-    printf("%9d       ", len);
-
-    if(data.unit == KB) {
-        bw = bw * 1.024e3;
-    } else if(data.unit == B){
-        bw = bw * 1.048576e6;
-    }
-
-    printf("%10.2f                          %10.2f\n", bw, mr);
+void bi_dir_data_init(perf_metrics_t * data) {
+    data->bw_type = "Bi-directional Bandwidth";
 }
 
-void print_results_header(output_types type, perf_metrics_t metric_info) {
-    if(type == BI_DIR) {
-        printf("\nResults for %d PEs %d trials with window size %d "\
-            "max message size %d with multiple of %d increments\n",
-            metric_info.num_pes, metric_info.trials, metric_info.window_size,
-            metric_info.max_len, metric_info.size_inc);
-
-        printf("\nLength           Bi-directional Bandwidth           "\
-            "Message Rate\n");
-    } else {
-        printf("\nLength           Uni-directional Bandwidth           "\
-            "Message Rate\n");
-    }
-
-    printf("in bytes         ");
-    if (metric_info.unit == MB) {
-        printf("in megabytes per second");
-    } else if (metric_info.unit == KB) {
-        printf("in kilobytes per second");
-    } else {
-        printf("in bytes per second");
-    }
-
-    printf("         in messages/seconds\n");
+void uni_dir_data_init(perf_metrics_t * data) {
+    data->bw_type = "Uni-directional Bandwidth";
 }
-
+/**************************************************************/
+/*                   Input Checking                           */
+/**************************************************************/
 
 void command_line_arg_check(int argc, char *argv[],
                             perf_metrics_t *metric_info) {
@@ -157,38 +125,73 @@ void static inline only_even_PEs_check(int my_node, int num_pes) {
 }
 
 /**************************************************************/
-/*                   INIT and teardown of resources           */
+/*                   Result Printing and Calc                 */
 /**************************************************************/
 
-void static inline bw_init_two_buff_data_stream(perf_metrics_t *metric_info,
-                                    int argc, char *argv[]) {
-    int i = 0;
+void print_data_results(double bw, double mr, perf_metrics_t data, int len) {
+    printf("%9d       ", len);
 
-    /*must be before data_init*/
-    shmem_init();
+    if(data.unit == KB) {
+        bw = bw * 1.024e3;
+    } else if(data.unit == B){
+        bw = bw * 1.048576e6;
+    }
 
-    data_init(metric_info);
-
-    only_even_PEs_check(metric_info->my_node, metric_info->num_pes);
-
-    for(i = 0; i < _SHMEM_REDUCE_MIN_WRKDATA_SIZE; i++)
-        red_psync[i] = _SHMEM_SYNC_VALUE;
-
-    command_line_arg_check(argc, argv, metric_info);
-
-    metric_info->buf = aligned_buffer_alloc(metric_info->max_len);
-    init_array(metric_info->buf, metric_info->max_len, metric_info->my_node);
-    metric_info->buf2 = aligned_buffer_alloc(metric_info->max_len);
-    init_array(metric_info->buf2, metric_info->max_len, metric_info->my_node);
-
+    printf("%10.2f                          %10.2f\n", bw, mr);
 }
 
-void static inline bw_free_two_buff_data_stream(perf_metrics_t *metric_info) {
-    shmem_barrier_all();
+void print_results_header(perf_metrics_t metric_info) {
+        printf("\nResults for %d PEs %d trials with window size %d "\
+            "max message size %d with multiple of %d increments\n",
+            metric_info.num_pes, metric_info.trials, metric_info.window_size,
+            metric_info.max_len, metric_info.size_inc);
 
-    shmem_free(metric_info->buf);
-    shmem_free(metric_info->buf2);
-    shmem_finalize();
+        printf("\nLength           %s           "\
+            "Message Rate\n", metric_info.bw_type);
+
+    printf("in bytes         ");
+    if (metric_info.unit == MB) {
+        printf("in megabytes per second");
+    } else if (metric_info.unit == KB) {
+        printf("in kilobytes per second");
+    } else {
+        printf("in bytes per second");
+    }
+
+    printf("         in messages/seconds\n");
+}
+
+/* reduction to collect performance results from even PE set
+            then start_pe will print results    */
+void static inline calc_and_print_results(double total_t, double bw,
+                        int len, perf_metrics_t metric_info)
+{
+    int num_even_PEs = metric_info.num_pes/2, start_pe = 0;
+    int stride_only_even_pes = 1;
+    static double pe_bw_sum;
+    double pe_bw_avg = 0.0, pe_mr_avg = 0.0;
+    int nred_elements = 1;
+    static double pwrk[_SHMEM_REDUCE_MIN_WRKDATA_SIZE];
+
+    if (total_t > 0 ) {
+        bw = (len / 1.048576e6 * metric_info.window_size * metric_info.trials) /
+                (total_t);
+    } else {
+        bw = 0.0;
+    }
+
+    /* base case: will be overwritten by collective if num_pes > 2 */
+    pe_bw_sum = bw;
+
+    if(metric_info.num_pes >= 2)
+        shmem_double_sum_to_all(&pe_bw_sum, &bw, nred_elements, start_pe,
+                                stride_only_even_pes, num_even_PEs, pwrk, red_psync);
+
+    if(metric_info.my_node == start_pe) {
+        pe_bw_avg = pe_bw_sum / metric_info.num_pes;
+        pe_mr_avg = pe_bw_avg / (len / 1.048576e6);
+        print_data_results(pe_bw_avg, pe_mr_avg, metric_info, len);
+    }
 }
 
 /**************************************************************/
@@ -203,7 +206,7 @@ void static inline bi_dir_bw_test_and_output(perf_metrics_t metric_info) {
     int len = 0, partner_pe = partner_node(metric_info.my_node);
 
     if (metric_info.my_node == 0)
-        print_results_header(BI_DIR, metric_info);
+        print_results_header(metric_info);
 
     for (len = metric_info.start_len; len <= metric_info.max_len;
         len *= metric_info.size_inc) {
@@ -239,7 +242,7 @@ void static inline uni_dir_bw_test_and_output(perf_metrics_t metric_info) {
     int len = 0, partner_pe = partner_node(metric_info.my_node);
 
     if (metric_info.my_node == 0)
-        print_results_header(UNI_DIR, metric_info);
+        print_results_header(metric_info);
 
     for (len = metric_info.start_len; len <= metric_info.max_len;
         len *= metric_info.size_inc) {
@@ -252,36 +255,84 @@ void static inline uni_dir_bw_test_and_output(perf_metrics_t metric_info) {
 
 }
 
+/**************************************************************/
+/*                   INIT and teardown of resources           */
+/**************************************************************/
 
-/* reduction to collect performance results from even PE set
-            then start_pe will print results    */
-void static inline calc_and_print_results(double total_t, double bw,
-                        int len, perf_metrics_t metric_info)
-{
-    int num_even_PEs = metric_info.num_pes/2, start_pe = 0;
-    int stride_only_even_pes = 1;
-    static double pe_bw_sum;
-    double pe_bw_avg = 0.0, pe_mr_avg = 0.0;
-    int nred_elements = 1;
-    static double pwrk[_SHMEM_REDUCE_MIN_WRKDATA_SIZE];
+void static inline bw_init_single_buff_data_stream(perf_metrics_t *metric_info,
+                                            int argc, char *argv[]) {
 
-    if (total_t > 0 ) {
-        bw = (len / 1.048576e6 * metric_info.window_size * metric_info.trials) /
-                (total_t);
-    } else {
-        bw = 0.0;
-    }
+    int i = 0;
 
-    /* base case: will be overwritten by collective if num_pes > 2 */
-    pe_bw_sum = bw;
+    /*must be before data_init*/
+    shmem_init();
 
-    if(metric_info.num_pes >= 2)
-        shmem_double_sum_to_all(&pe_bw_sum, &bw, nred_elements, start_pe,
-                                stride_only_even_pes, num_even_PEs, pwrk, red_psync);
+    data_init(metric_info);
 
-    if(metric_info.my_node == start_pe) {
-        pe_bw_avg = pe_bw_sum / metric_info.num_pes;
-        pe_mr_avg = pe_bw_avg / (len / 1.048576e6);
-        print_data_results(pe_bw_avg, pe_mr_avg, metric_info, len);
-    }
+    only_even_PEs_check(metric_info->my_node, metric_info->num_pes);
+
+    for(i = 0; i < _SHMEM_REDUCE_MIN_WRKDATA_SIZE; i++)
+        red_psync[i] = _SHMEM_SYNC_VALUE;
+
+    command_line_arg_check(argc, argv, metric_info);
+
+    metric_info->buf = aligned_buffer_alloc(metric_info->max_len);
+    init_array(metric_info->buf, metric_info->max_len, metric_info->my_node);
 }
+
+
+void static inline bi_dir_init(perf_metrics_t *metric_info, int argc,
+                                char *argv[]) {
+    bw_init_single_buff_data_stream(metric_info, argc, argv);
+
+    bi_dir_data_init(metric_info);
+
+    metric_info->buf2 = aligned_buffer_alloc(metric_info->max_len);
+    init_array(metric_info->buf2, metric_info->max_len, metric_info->my_node);
+}
+
+void static inline uni_dir_init(perf_metrics_t *metric_info, int argc,
+                                char *argv[]) {
+    bw_init_single_buff_data_stream(metric_info, argc, argv);
+
+    uni_dir_data_init(metric_info);
+}
+
+void static inline bi_dir_bw_data_free(perf_metrics_t *metric_info) {
+    shmem_barrier_all();
+
+    shmem_free(metric_info->buf);
+    shmem_free(metric_info->buf2);
+    shmem_finalize();
+}
+
+void static inline uni_dir_bw_data_free(perf_metrics_t *metric_info) {
+    shmem_barrier_all();
+
+    shmem_free(metric_info->buf);
+    shmem_finalize();
+}
+
+void static inline bi_dir_bw_main(int argc, char *argv[]) {
+
+    perf_metrics_t metric_info;
+
+    bi_dir_init(&metric_info, argc, argv);
+
+    bi_dir_bw_test_and_output(metric_info);
+
+    bi_dir_bw_data_free(&metric_info);
+
+} /*main() */
+
+void static inline uni_dir_bw_main(int argc, char *argv[]) {
+
+    perf_metrics_t metric_info;
+
+    uni_dir_init(&metric_info, argc, argv);
+
+    uni_dir_bw_test_and_output(metric_info);
+
+    uni_dir_bw_data_free(&metric_info);
+
+} /*main() */

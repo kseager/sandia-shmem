@@ -28,7 +28,7 @@
 **
 **  Notice: micro benchmark ~ two nodes only
 **
-**  Features of Test: uni-directional bandwidth
+**  Features of Test: bi-direction bandwidth
 **
 **  -by default megabytes/second results
 **
@@ -40,18 +40,19 @@
 
 int main(int argc, char *argv[])
 {
-    uni_dir_bw_main(argc, argv);
+    bi_dir_bw_main(argc, argv);
 
     return 0;
 }
 
-/*only even PE's put to my_node + 1*/
+/*even PE's put to their odd counterpart (my_node + 1), which does a put back to them
+ * at the same time*/
 void
-uni_dir_bw(int len, perf_metrics_t *metric_info)
+bi_dir_bw(int len, perf_metrics_t *metric_info)
 {
     double start = 0.0, end = 0.0;
-    int i = 0, j = 0;
     int dest = partner_node(metric_info->my_node);
+    int i = 0, j = 0;
     static double bw = 0.0; /*must be symmetric for reduction*/
 
     shmem_barrier_all();
@@ -65,11 +66,18 @@ uni_dir_bw(int len, perf_metrics_t *metric_info)
                 shmem_putmem(metric_info->buf, metric_info->buf, len, dest);
 
             shmem_quiet();
-
         }
         end = shmemx_wtime();
 
         calc_and_print_results((end - start), bw, len, *metric_info);
+
+    } else {
+        for (i = 0; i < metric_info->trials + metric_info->warmup; i++) {
+            for(j = 0; j < metric_info->window_size; j++)
+                shmem_putmem(metric_info->buf2, metric_info->buf2, len, dest);
+
+            shmem_quiet();
+        }
     }
 }
 

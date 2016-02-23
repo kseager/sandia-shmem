@@ -24,11 +24,11 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
 **
-**  This is a bandwidth centric test for put: back-to-back message rate
+**  This is a bandwidth centric test for get: back-to-back message rate
 **
 **  Notice: micro benchmark ~ two nodes only
 **
-**  Features of Test: uni-directional bandwidth
+**  Features of Test: bi-direction bandwidth
 **
 **  -by default megabytes/second results
 **
@@ -37,21 +37,21 @@
 
 #include <bw_common.h>
 
-
 int main(int argc, char *argv[])
 {
-    uni_dir_bw_main(argc, argv);
+    bi_dir_bw_main(argc,argv);
 
     return 0;
-}
+}  /* end of main() */
 
-/*only even PE's put to my_node + 1*/
+/*even PE's get to their odd counterpart (my_node + 1), which does a get
+ * back to them at the same time*/
 void
-uni_dir_bw(int len, perf_metrics_t *metric_info)
+bi_dir_bw(int len, perf_metrics_t *metric_info)
 {
     double start = 0.0, end = 0.0;
-    int i = 0, j = 0;
     int dest = partner_node(metric_info->my_node);
+    int i = 0, j = 0;
     static double bw = 0.0; /*must be symmetric for reduction*/
 
     shmem_barrier_all();
@@ -62,17 +62,20 @@ uni_dir_bw(int len, perf_metrics_t *metric_info)
                 start = shmemx_wtime();
 
             for(j = 0; j < metric_info->window_size; j++)
-                shmem_putmem(metric_info->buf, metric_info->buf, len, dest);
-
-            shmem_quiet();
-
+                shmem_getmem(metric_info->buf2, metric_info->buf2, len, dest);
         }
         end = shmemx_wtime();
 
         calc_and_print_results((end - start), bw, len, *metric_info);
+
+    } else {
+        for (i = 0; i < metric_info->trials + metric_info->warmup; i++) {
+            for(j = 0; j < metric_info->window_size; j++)
+                shmem_getmem(metric_info->buf, metric_info->buf, len, dest);
+        }
     }
 }
 
 int node_to_check(int my_node) {
-    return put_node_to_check(my_node);
+    return get_node_to_check(my_node);
 }
