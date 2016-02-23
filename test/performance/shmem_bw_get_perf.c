@@ -24,7 +24,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
 **
-**  This is a bandwidth centric test for put: back-to-back message rate
+**  This is a bandwidth centric test for get: back-to-back message rate
 **
 **  Notice: micro benchmark ~ two nodes only
 **
@@ -38,7 +38,6 @@
 */
 
 #include <bw_common.h>
-
 
 int main(int argc, char *argv[])
 {
@@ -55,8 +54,8 @@ int main(int argc, char *argv[])
     return 0;
 }  /* end of main() */
 
-/*even PE's put to their odd counterpart (my_node + 1), which does a put back to them
- * at the same time*/
+/*even PE's get to their odd counterpart (my_node + 1), which does a get
+ * back to them at the same time*/
 void
 bi_dir_bw(int len, perf_metrics_t *metric_info)
 {
@@ -73,9 +72,7 @@ bi_dir_bw(int len, perf_metrics_t *metric_info)
                 start = shmemx_wtime();
 
             for(j = 0; j < metric_info->window_size; j++)
-                shmem_putmem(metric_info->buf, metric_info->buf, len, dest);
-
-            shmem_quiet();
+                shmem_getmem(metric_info->buf2, metric_info->buf2, len, dest);
         }
         end = shmemx_wtime();
 
@@ -84,14 +81,12 @@ bi_dir_bw(int len, perf_metrics_t *metric_info)
     } else {
         for (i = 0; i < metric_info->trials + metric_info->warmup; i++) {
             for(j = 0; j < metric_info->window_size; j++)
-                shmem_putmem(metric_info->buf2, metric_info->buf2, len, dest);
-
-            shmem_quiet();
+                shmem_getmem(metric_info->buf, metric_info->buf, len, dest);
         }
     }
 }
 
-/*only even PE's put to my_node + 1*/
+/*only even PE's get to my_node + 1*/
 void
 uni_dir_bw(int len, perf_metrics_t *metric_info)
 {
@@ -108,10 +103,7 @@ uni_dir_bw(int len, perf_metrics_t *metric_info)
                 start = shmemx_wtime();
 
             for(j = 0; j < metric_info->window_size; j++)
-                shmem_putmem(metric_info->buf, metric_info->buf, len, dest);
-
-            shmem_quiet();
-
+                shmem_getmem(metric_info->buf, metric_info->buf, len, dest);
         }
         end = shmemx_wtime();
 
@@ -120,5 +112,5 @@ uni_dir_bw(int len, perf_metrics_t *metric_info)
 }
 
 int node_to_check(int my_node) {
-    return put_node_to_check(my_node);
+    return get_node_to_check(my_node);
 }

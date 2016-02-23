@@ -156,6 +156,10 @@ void static inline only_even_PEs_check(int my_node, int num_pes) {
     }
 }
 
+/**************************************************************/
+/*                   INIT and teardown of resources           */
+/**************************************************************/
+
 void static inline bw_init_two_buff_data_stream(perf_metrics_t *metric_info,
                                     int argc, char *argv[]) {
     int i = 0;
@@ -191,7 +195,7 @@ void static inline bw_free_two_buff_data_stream(perf_metrics_t *metric_info) {
 /*                   Bi-Directional BW                        */
 /**************************************************************/
 
-extern void bi_dir_bw(int len, perf_metrics_t metric_info);
+extern void bi_dir_bw(int len, perf_metrics_t *metric_info);
 
 void static inline bi_dir_bw_test_and_output(perf_metrics_t metric_info) {
 
@@ -204,7 +208,7 @@ void static inline bi_dir_bw_test_and_output(perf_metrics_t metric_info) {
     for (len = metric_info.start_len; len <= metric_info.max_len;
         len *= metric_info.size_inc) {
 
-        bi_dir_bw(len, metric_info);
+        bi_dir_bw(len, &metric_info);
     }
 
     if(metric_info.validate) {
@@ -219,7 +223,17 @@ void static inline bi_dir_bw_test_and_output(perf_metrics_t metric_info) {
 /*                   UNI-Directional BW                       */
 /**************************************************************/
 
-extern void uni_dir_bw(int len, perf_metrics_t metric_info);
+extern void uni_dir_bw(int len, perf_metrics_t *metric_info);
+
+extern int node_to_check(int my_node);
+
+static inline int put_node_to_check(int my_node) {
+    return (my_node % 2 != 0);
+}
+
+static inline int get_node_to_check(int my_node) {
+    return (my_node % 2 == 0);
+}
 
 void static inline uni_dir_bw_test_and_output(perf_metrics_t metric_info) {
     int len = 0, partner_pe = partner_node(metric_info.my_node);
@@ -227,16 +241,13 @@ void static inline uni_dir_bw_test_and_output(perf_metrics_t metric_info) {
     if (metric_info.my_node == 0)
         print_results_header(UNI_DIR, metric_info);
 
-    /*reset array*/
-    init_array(metric_info.buf, metric_info.max_len, metric_info.my_node);
-
     for (len = metric_info.start_len; len <= metric_info.max_len;
         len *= metric_info.size_inc) {
 
-        uni_dir_bw(len, metric_info);
+        uni_dir_bw(len, &metric_info);
     }
 
-    if((metric_info.my_node % 2 != 0) && metric_info.validate)
+    if((node_to_check(metric_info.my_node)) && metric_info.validate)
         validate_recv(metric_info.buf, metric_info.max_len, partner_pe);
 
 }
