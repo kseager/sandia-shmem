@@ -17,6 +17,12 @@
 #define TRUE  (1)
 #define FALSE (0)
 
+/*if PE set starts at zero will use only even set, else odd set*/
+typedef enum {
+    EVEN_SET = 0,
+    ODD_SET = 1
+} red_PE_start;
+
 typedef enum {
     B,
     KB,
@@ -162,12 +168,13 @@ void print_results_header(perf_metrics_t metric_info) {
 }
 
 /* reduction to collect performance results from even PE set
-            then start_pe will print results    */
+    then start_pe will print results --- assumes num_pes is even -start_pe
+    determines if it uses even or odd set */
 void static inline calc_and_print_results(double total_t, double bw,
-                        int len, perf_metrics_t metric_info)
+                    int len, perf_metrics_t metric_info, red_PE_start start_pe)
 {
-    int num_even_PEs = metric_info.num_pes/2, start_pe = 0;
-    int stride_only_even_pes = 1;
+    int half_of_nPEs = metric_info.num_pes/2;
+    int stride_every_other_pe = 1;
     static double pe_bw_sum;
     double pe_bw_avg = 0.0, pe_mr_avg = 0.0;
     int nred_elements = 1;
@@ -185,7 +192,8 @@ void static inline calc_and_print_results(double total_t, double bw,
 
     if(metric_info.num_pes >= 2)
         shmem_double_sum_to_all(&pe_bw_sum, &bw, nred_elements, start_pe,
-                                stride_only_even_pes, num_even_PEs, pwrk, red_psync);
+                                stride_every_other_pe, half_of_nPEs, pwrk,
+                                red_psync);
 
     if(metric_info.my_node == start_pe) {
         pe_bw_avg = pe_bw_sum / metric_info.num_pes;
@@ -228,16 +236,6 @@ void static inline bi_dir_bw_test_and_output(perf_metrics_t metric_info) {
 
 extern void uni_dir_bw(int len, perf_metrics_t *metric_info);
 
-extern int node_to_check(int my_node);
-
-static inline int put_node_to_check(int my_node) {
-    return (my_node % 2 != 0);
-}
-
-static inline int get_node_to_check(int my_node) {
-    return (my_node % 2 == 0);
-}
-
 void static inline uni_dir_bw_test_and_output(perf_metrics_t metric_info) {
     int len = 0, partner_pe = partner_node(metric_info.my_node);
 
@@ -250,7 +248,7 @@ void static inline uni_dir_bw_test_and_output(perf_metrics_t metric_info) {
         uni_dir_bw(len, &metric_info);
     }
 
-    if((node_to_check(metric_info.my_node)) && metric_info.validate)
+    if((metric_info.my_node % 2 == 0) && metric_info.validate)
         validate_recv(metric_info.buf, metric_info.max_len, partner_pe);
 
 }

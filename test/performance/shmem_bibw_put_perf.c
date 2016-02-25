@@ -69,7 +69,7 @@ bi_dir_bw(int len, perf_metrics_t *metric_info)
         }
         end = shmemx_wtime();
 
-        calc_and_print_results((end - start), bw, len, *metric_info);
+        calc_and_print_results((end - start), bw, len, *metric_info, EVEN_SET);
 
     } else {
         for (i = 0; i < metric_info->trials + metric_info->warmup; i++) {
@@ -79,8 +79,4 @@ bi_dir_bw(int len, perf_metrics_t *metric_info)
             shmem_quiet();
         }
     }
-}
-
-int node_to_check(int my_node) {
-    return put_node_to_check(my_node);
 }

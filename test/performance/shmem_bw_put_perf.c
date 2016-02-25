@@ -56,7 +56,7 @@ uni_dir_bw(int len, perf_metrics_t *metric_info)
 
     shmem_barrier_all();
 
-    if (metric_info->my_node % 2 == 0) {
+    if (metric_info->my_node % 2 != 0) {
         for (i = 0; i < metric_info->trials + metric_info->warmup; i++) {
             if(i == metric_info->warmup)
                 start = shmemx_wtime();
@@ -69,10 +69,6 @@ uni_dir_bw(int len, perf_metrics_t *metric_info)
         }
         end = shmemx_wtime();
 
-        calc_and_print_results((end - start), bw, len, *metric_info);
+        calc_and_print_results((end - start), bw, len, *metric_info, ODD_SET);
     }
-}
-
-int node_to_check(int my_node) {
-    return put_node_to_check(my_node);
 }
