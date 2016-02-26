@@ -24,6 +24,23 @@ int static inline is_divisible_by_4(int num)
     return (!(num & 0x00000003));
 }
 
+/*to be a power of 2 must only have 1 set bit*/
+int static inline is_pow_of_2(unsigned int num)
+{
+    int i = 0;
+    unsigned int count = 0;
+
+    do {
+        if(num & 1)
+            count++;
+        if(count > 1)
+            return 0;
+        num >>= 1;
+    } while(num);
+
+    return 1;
+}
+
 void init_array(char * const buf, int len, int my_pe_num)
 {
     int i = 0;
@@ -40,9 +57,10 @@ void init_array(char * const buf, int len, int my_pe_num)
 void static inline validate_recv(char * buf, int len, int partner_pe)
 {
     int i = 0;
-    /*verify len is a power of four */
     int array_size = len / sizeof(int);
     int * ibuf = (int *)buf;
+
+    assert(is_divisible_by_4(len));
 
     for(i = 0; i < array_size; i++) {
         if(ibuf[i] != partner_pe)

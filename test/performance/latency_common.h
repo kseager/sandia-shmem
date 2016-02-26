@@ -13,9 +13,9 @@
 #define WARMUP 10
 
 typedef struct perf_metrics {
-   int start_len, max_len;
-   int inc, trials;
-   int warmup;
+   unsigned int start_len, max_len;
+   unsigned int inc, trials;
+   unsigned int warmup;
    int validate;
    int my_node, npes;
    long * target;
@@ -57,12 +57,15 @@ void static inline command_line_arg_check(int argc, char *argv[],
     /* check command line args */
     while ((ch = getopt(argc, argv, "e:s:n:v")) != EOF) {
         switch (ch) {
-        case 'e':
-            metric_info->max_len = strtol(optarg, (char **)NULL, 0);
-            break;
         case 's':
             metric_info->start_len = strtol(optarg, (char **)NULL, 0);
             if ( metric_info->start_len < 1 ) metric_info->start_len = 1;
+            if(!is_pow_of_2(metric_info->start_len)) error = TRUE;
+            break;
+        case 'e':
+            metric_info->max_len = strtol(optarg, (char **)NULL, 0);
+            if(!is_pow_of_2(metric_info->max_len)) error = TRUE;
+            if(metric_info->max_len < metric_info->start_len) error = TRUE;
             break;
         case 'n':
             metric_info->trials = strtol(optarg, (char **)NULL, 0);
@@ -79,10 +82,10 @@ void static inline command_line_arg_check(int argc, char *argv[],
 
     if (error) {
         if (metric_info->my_node == 0) {
-            fprintf(stderr, "Usage: %s [-s start_length] [-e end_length] "\
+            fprintf(stderr, "Usage: [-s start_length] [-e end_length] "\
                     ": lengths must be a power of two \n " \
                     "[-n trials (must be greater than 20)] "\
-                    "[-v (validate results)]\n", argv[0]);
+                    "[-v (validate results)]\n");
         }
         shmem_finalize();
         exit (-1);
@@ -159,7 +162,7 @@ void static inline latency_init_resources(int argc, char *argv[],
 
     only_two_PEs_check(data->my_node, data->npes);
 
-    command_line_arg_check(argc, argv, &data);
+    command_line_arg_check(argc, argv, data);
     data->buf = aligned_buffer_alloc(data->max_len);
     init_array(data->buf, data->max_len, data->my_node);
     data->target = shmem_malloc(sizeof(long));

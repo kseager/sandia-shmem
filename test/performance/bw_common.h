@@ -30,9 +30,9 @@ typedef enum {
 } bw_units;
 
 typedef struct perf_metrics {
-    int start_len, max_len;
-    int size_inc, trials;
-    int window_size, warmup;
+    unsigned int start_len, max_len;
+    unsigned int size_inc, trials;
+    unsigned int window_size, warmup;
     int validate;
     int my_node, num_pes;
     bw_units unit;
@@ -77,13 +77,15 @@ void command_line_arg_check(int argc, char *argv[],
     /* check command line args */
     while ((ch = getopt(argc, argv, "e:s:n:kbv")) != EOF) {
         switch (ch) {
-        case 'e':
-            metric_info->max_len = strtol(optarg, (char **)NULL, 0);
-            if(!is_divisible_by_4(metric_info->max_len)) error = TRUE;
-            break;
         case 's':
             metric_info->start_len = strtol(optarg, (char **)NULL, 0);
             if ( metric_info->start_len < 1 ) metric_info->start_len = 1;
+            if(!is_pow_of_2(metric_info->start_len)) error = TRUE;
+            break;
+        case 'e':
+            metric_info->max_len = strtol(optarg, (char **)NULL, 0);
+            if(!is_pow_of_2(metric_info->max_len)) error = TRUE;
+            if(metric_info->max_len < metric_info->start_len) error = TRUE;
             break;
         case 'n':
             metric_info->trials = strtol(optarg, (char **)NULL, 0);
@@ -135,9 +137,9 @@ void print_data_results(double bw, double mr, perf_metrics_t data, int len) {
     printf("%9d       ", len);
 
     if(data.unit == KB) {
-        bw = bw * 1.024e3;
+        bw = bw * 1e3;
     } else if(data.unit == B){
-        bw = bw * 1.048576e6;
+        bw = bw * 1e6;
     }
 
     printf("%10.2f                          %10.2f\n", bw, mr);
@@ -178,7 +180,7 @@ void static inline calc_and_print_results(double total_t, double bw,
     static double pwrk[_SHMEM_REDUCE_MIN_WRKDATA_SIZE];
 
     if (total_t > 0 ) {
-        bw = (len / 1.048576e6 * metric_info.window_size * metric_info.trials) /
+        bw = (len / 1e6 * metric_info.window_size * metric_info.trials) /
                 (total_t);
     } else {
         bw = 0.0;
@@ -194,7 +196,7 @@ void static inline calc_and_print_results(double total_t, double bw,
 
     if(metric_info.my_node == start_pe) {
         pe_bw_avg = pe_bw_sum / metric_info.num_pes;
-        pe_mr_avg = pe_bw_avg / (len / 1.048576e6);
+        pe_mr_avg = pe_bw_avg / (len / 1e6);
         print_data_results(pe_bw_avg, pe_mr_avg, metric_info, len);
     }
 }
