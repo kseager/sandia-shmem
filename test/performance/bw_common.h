@@ -75,11 +75,8 @@ void command_line_arg_check(int argc, char *argv[],
     extern char *optarg;
 
     /* check command line args */
-    while ((ch = getopt(argc, argv, "i:e:s:n:kbv")) != EOF) {
+    while ((ch = getopt(argc, argv, "e:s:n:kbv")) != EOF) {
         switch (ch) {
-        case 'i':
-            metric_info->size_inc = strtol(optarg, (char **)NULL, 0);
-            break;
         case 'e':
             metric_info->max_len = strtol(optarg, (char **)NULL, 0);
             if(!is_divisible_by_4(metric_info->max_len)) error = TRUE;
@@ -110,8 +107,8 @@ void command_line_arg_check(int argc, char *argv[],
     if (error) {
         if (metric_info->my_node == 0) {
             fprintf(stderr, "Usage: [-s start_length] [-e end_length] "\
-                    ": lengths should be divisible by four \n " \
-                    "[-i inc] [-n trials (must be greater than 20)] "\
+                    ": lengths should be a power of two \n " \
+                    "[-n trials (must be greater than 20)] "\
                     "[-k (kilobytes/second)] [-b (bytes/second)] "\
                     "[-v (validate data stream)] \n");
         }
@@ -206,6 +203,9 @@ void static inline calc_and_print_results(double total_t, double bw,
 /*                   Bi-Directional BW                        */
 /**************************************************************/
 
+/*have two symmetric char array metric_info->buf/buf2 of max_len to
+ * use for calculation initalized with my_node number
+ * NOTE: post function validation assumptions */
 extern void bi_dir_bw(int len, perf_metrics_t *metric_info);
 
 void static inline bi_dir_bw_test_and_output(perf_metrics_t metric_info) {
@@ -234,6 +234,9 @@ void static inline bi_dir_bw_test_and_output(perf_metrics_t metric_info) {
 /*                   UNI-Directional BW                       */
 /**************************************************************/
 
+/*have one symmetric char array metric_info->buf of max_len to use for
+ * calculation initalized with my_node number
+ * NOTE: post function validation assumptions */
 extern void uni_dir_bw(int len, perf_metrics_t *metric_info);
 
 void static inline uni_dir_bw_test_and_output(perf_metrics_t metric_info) {
