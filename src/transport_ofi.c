@@ -116,7 +116,7 @@ size_t   shmem_transport_ofi_max_atomic_size = 0;
 uint64_t shmem_transport_ofi_max_poll = (1ULL<<30);
 
 #define OFI_MAJOR_VERSION 1
-#define OFI_MINOR_VERSION 0
+#define OFI_MINOR_VERSION 2
 
 static
 void
