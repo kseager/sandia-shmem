@@ -57,6 +57,7 @@ extern size_t          		 	shmem_transport_ofi_max_buffered_send;
 extern size_t    		 	shmem_transport_ofi_max_atomic_size;
 extern size_t    			shmem_transport_ofi_max_msg_size;
 extern size_t    			shmem_transport_ofi_bounce_buffer_size;
+extern long     			atomicwarn;
 
 #ifndef MIN
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -875,7 +876,14 @@ static inline
 int shmem_transport_atomic_supported(shm_internal_op_t op,
                                      shm_internal_datatype_t datatype)
 {
-    return datatype != SHM_INTERNAL_LONG_DOUBLE || shmem_transport_have_long_double;
+    if(atomicwarn) {
+        size_t size = 0;
+        int ret = fi_atomicvalid(shmem_transport_ofi_epfd, datatype, op, &size);
+        return ((ret != 0 || size == 0) ? 0 : 1 );
+    } else
+        return datatype != SHM_INTERNAL_LONG_DOUBLE ||
+                                        shmem_transport_have_long_double;
+
 }
 
 
