@@ -207,12 +207,12 @@ static int REDUCE_BITWISE_OPS[]=
 };
 
 
-#define SIZEOF_REDC_DT 8
+#define SIZEOF_REDC_DT 9
 static int DT_REDUCE_COMPARE[]=
 {
   SHM_INTERNAL_FLOAT, SHM_INTERNAL_DOUBLE, SHM_INTERNAL_SHORT,
   SHM_INTERNAL_INT, SHM_INTERNAL_LONG, SHM_INTERNAL_LONG_LONG,
-  SHM_INTERNAL_INT32, SHM_INTERNAL_INT64
+  SHM_INTERNAL_INT32, SHM_INTERNAL_INT64, SHM_INTERNAL_LONG_DOUBLE
 };
 #define SIZEOF_REDC_OPS 2
 static int REDUCE_COMPARE_OPS[]=
@@ -221,13 +221,13 @@ static int REDUCE_COMPARE_OPS[]=
 };
 
 
-#define SIZEOF_REDA_DT 10
+#define SIZEOF_REDA_DT 11
 static int DT_REDUCE_ARITH[]=
 {
   SHM_INTERNAL_FLOAT, SHM_INTERNAL_DOUBLE, SHM_INTERNAL_FLOAT_COMPLEX,
   SHM_INTERNAL_DOUBLE_COMPLEX, SHM_INTERNAL_SHORT, SHM_INTERNAL_INT,
   SHM_INTERNAL_LONG, SHM_INTERNAL_LONG_LONG, SHM_INTERNAL_INT32,
-  SHM_INTERNAL_INT64
+  SHM_INTERNAL_INT64, SHM_INTERNAL_LONG_DOUBLE
 };
 #define SIZEOF_REDA_OPS 2
 static int REDUCE_ARITH_OPS[]=
@@ -757,7 +757,7 @@ static inline int atomic_limitations_check(void)
     /* Retrieve messaging limitations from OFI */
     /* ----------------------------------------*/
 
-    int j = 0, ret = 0;
+    int ret = 0;
     size_t atomic_size;
 
     if(NULL != shmem_util_getenv_str("OFI_ATOMIC_CHECKS_WARN"))
@@ -827,39 +827,6 @@ static inline int atomic_limitations_check(void)
                     DT_INTERNAL_REQ, INTERNAL_REQ_OPS);
     if(ret)
         return ret;
-
-    /* LONG DOUBLE limitation is common */
-    for(j=0; j<SIZEOF_REDC_OPS; j++) { //OPS
-      ret = fi_atomicvalid(shmem_transport_ofi_epfd, SHM_INTERNAL_LONG_DOUBLE,
-                REDUCE_COMPARE_OPS[j], &atomic_size);
-      if(ret!=0 || atomic_size == 0) {
-	    shmem_transport_have_long_double = 0;
-		break;
-	  } else if((atomic_size*sizeof(long double)) !=
-                                    shmem_transport_ofi_max_atomic_size) {
-        fprintf(stderr, "Error OFI detected no support for atomic '%s' "
-               "on type %d\n", SHMEM_OpName[REDUCE_COMPARE_OPS[j]],
-                SHM_INTERNAL_LONG_DOUBLE);
-            OFI_ERRMSG("Error: atomicvalid ret=%d atomic_size=%d \n",
-                       ret, (int)atomic_size);
-      }
-    }
-
-    for(j=0; j<SIZEOF_REDA_OPS; j++) { //OPS
-      ret = fi_atomicvalid(shmem_transport_ofi_epfd, SHM_INTERNAL_LONG_DOUBLE,
-                REDUCE_ARITH_OPS[j], &atomic_size);
-      if(ret!=0 || atomic_size == 0) {
-	    shmem_transport_have_long_double = 0;
-		break;
-	  } else if((atomic_size*sizeof(long double)) !=
-                                    shmem_transport_ofi_max_atomic_size) {
-        fprintf(stderr, "Error OFI detected no support for atomic '%s' "
-               "on type %d\n", SHMEM_OpName[REDUCE_ARITH_OPS[j]],
-                SHM_INTERNAL_LONG_DOUBLE);
-            OFI_ERRMSG("Error: atomicvalid ret=%d atomic_size=%d \n",
-                       ret, (int)atomic_size);
-      }
-    }
 
     return 0;
 }
