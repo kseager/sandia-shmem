@@ -59,24 +59,6 @@ before_install:
     - ./configure --prefix=$TRAVIS_INSTALL/libfabric
     - make $TRAVIS_PAR_MAKE
     - make install
-    ## Build Hydra
-    - cd $TRAVIS_SRC
-    - wget http://www.mpich.org/static/downloads/3.2/hydra-3.2.tar.gz
-    - tar xvzf hydra-3.2.tar.gz
-    - cd hydra-3.2/
-    - ./configure --prefix=$TRAVIS_INSTALL/hydra
-    - make $TRAVIS_PAR_MAKE
-    - make install
-    ## Fetch UH Tests
-    - cd $TRAVIS_SRC
-    - git clone --depth 10 https://github.com/openshmem-org/tests-uh.git tests-uh
-    ## Fetch ISx
-    - cd $TRAVIS_SRC
-    - git clone --depth 10 https://github.com/ParRes/ISx.git ISx
-    ## Fetch PRK
-    - cd $TRAVIS_SRC
-    - git clone --depth 10 https://github.com/ParRes/Kernels.git PRK
-    - echo -e "SHMEMCC=oshcc\nSHMEMTOP=$$TRAVIS_INSTALL\n" > PRK/common/make.defs
 
 install:
     - cd $SOS_SRC
@@ -103,15 +85,23 @@ script:
     - ./configure --with-ofi=$TRAVIS_INSTALL/libfabric/ --prefix=$TRAVIS_INSTALL/sandia-shmem-ofi $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
     - make $TRAVIS_PAR_MAKE
     - make $TRAVIS_PAR_MAKE check TESTS=
-    - make VERBOSE=1 TEST_RUNNER="mpiexec.hydra -np 2" check
     - make install
+    ###
+    ### Build test suite
+    ###
+    - export PATH=$TRAVIS_INSTALL/sandia-shmem-ofi/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
+    - ./build_tests.sh $TRAVIS_SRC $TRAVIS_INSTALL
+    ###
+    ### check OFI unit
+    ###
+    - cd $SOS_SRC
+    - make VERBOSE=1 TEST_RUNNER="mpiexec.hydra -np 2" check
     ###
     ### Run the UH test suite (Portals)
     ###
     - export PATH=$TRAVIS_INSTALL/portals4/bin:$TRAVIS_INSTALL/sandia-shmem-portals4/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
     - export OSHRUN_LAUNCHER="mpiexec.hydra"
     - cd $TRAVIS_SRC/tests-uh
-    - make $TRAVIS_PAR_MAKE C_feature_tests F_feature_tests
     #- make C_feature_tests-run 2>&1 | tee uh-tests-c-feature-tests.log
     # Check for failures in the C tests
     #- if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-c-feature-tests.log; then false; else true; fi
@@ -125,7 +115,6 @@ script:
     - export PATH=$TRAVIS_INSTALL/sandia-shmem-ofi/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
     - export OSHRUN_LAUNCHER="mpiexec.hydra"
     - cd $TRAVIS_SRC/tests-uh
-    - make $TRAVIS_PAR_MAKE C_feature_tests F_feature_tests
     - make C_feature_tests-run 2>&1 | tee uh-tests-c-feature-tests.log
     # Check for failures in the C tests
     - if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-c-feature-tests.log; then false; else true; fi
