@@ -87,15 +87,21 @@ script:
     - make $TRAVIS_PAR_MAKE check TESTS=
     - make install
     ###
-    ### Build test suite
+    ### Build test suite OFI
     ###
+    - cd $SOS_SRC
     - export PATH=$TRAVIS_INSTALL/sandia-shmem-ofi/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
     - ./build_tests.sh $TRAVIS_SRC $TRAVIS_INSTALL
     ###
-    ### check OFI unit
+    ### Run tests suite OFI
     ###
     - cd $SOS_SRC
-    - make VERBOSE=1 TEST_RUNNER="mpiexec.hydra -np 2" check
+    - export PATH=$TRAVIS_INSTALL/sandia-shmem-ofi/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
+    - ./run_tests.sh $TRAVIS_SRC $SOS_SRC
+    # Check for failures in the C tests
+    - if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-c-feature-tests.log; then false; else true; fi
+    # Check for failures in the Fortran tests
+    - if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-f-feature-tests.log; then false; else true; fi
     ###
     ### Run the UH test suite (Portals)
     ###
@@ -110,19 +116,6 @@ script:
     #- if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-f-feature-tests.log; then false; else true; fi
     - make clean
     ###
-    ### Run the UH test suite (OFI)
-    ###
-    - export PATH=$TRAVIS_INSTALL/sandia-shmem-ofi/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
-    - export OSHRUN_LAUNCHER="mpiexec.hydra"
-    - cd $TRAVIS_SRC/tests-uh
-    - make C_feature_tests-run 2>&1 | tee uh-tests-c-feature-tests.log
-    # Check for failures in the C tests
-    - if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-c-feature-tests.log; then false; else true; fi
-    - make F_feature_tests-run 2>&1 | tee uh-tests-f-feature-tests.log
-    # Check for failures in the Fortran tests
-    - if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-f-feature-tests.log; then false; else true; fi
-    - make clean
-    ###
     ### Run ISx (Portals)
     ###
     - export PATH=$TRAVIS_INSTALL/portals4/bin:$TRAVIS_INSTALL/sandia-shmem-portals4/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
@@ -131,37 +124,12 @@ script:
     - make CC=oshcc LDLIBS=-lm
     - make clean
     ###
-    ### Run ISx (OFI)
-    ###
-    - export PATH=$TRAVIS_INSTALL/sandia-shmem-ofi/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
-    - export OSHRUN_LAUNCHER="mpiexec.hydra"
-    - cd $TRAVIS_SRC/ISx/SHMEM
-    - make CC=oshcc LDLIBS=-lm
-    - mpiexec.hydra -np 4 ./bin/isx.strong 134217728 output_strong
-    - mpiexec.hydra -np 4 ./bin/isx.weak 33554432 output_weak
-    - mpiexec.hydra -np 4 ./bin/isx.weak_iso 33554432 output_weak_iso
-    - make clean
-    ###
     ### Run PRK (Portals)
     ###
     - export PATH=$TRAVIS_INSTALL/portals4/bin:$TRAVIS_INSTALL/sandia-shmem-portals4/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
     - export OSHRUN_LAUNCHER="mpiexec.hydra"
     - cd $TRAVIS_SRC/PRK
     - make allshmem
-    - make clean
-    ###
-    ### Run PRK (OFI)
-    ###
-    - export PATH=$TRAVIS_INSTALL/sandia-shmem-ofi/bin:$TRAVIS_INSTALL/hydra/bin:$BASE_PATH
-    - export OSHRUN_LAUNCHER="mpiexec.hydra"
-    - cd $TRAVIS_SRC/PRK
-    - make allshmem
-    - mpiexec.hydra -np 4 ./SHMEM/Stencil/stencil 100 1000 2>&1 | tee stencil.log
-    - grep -qi "Solution validates" stencil.log
-    - mpiexec.hydra -np 4 ./SHMEM/Synch_p2p/p2p 10 1000 1000 2>&1 | tee p2p.log
-    - grep -qi "Solution validates" p2p.log
-    - mpiexec.hydra -np 4 ./SHMEM/Transpose/transpose 10 1000 2>&1 | tee transpose.log
-    - grep -qi "Solution validates" transpose.log
     - make clean
 
 notifications:
