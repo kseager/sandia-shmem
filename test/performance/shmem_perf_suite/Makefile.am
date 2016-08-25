@@ -75,6 +75,6 @@ shmem_bw_nb_get_perf_SOURCES = shmem_bw_nb_get_perf.c bw_common.h common.h uni_d
 
 shmem_bibw_nb_get_perf_SOURCES = shmem_bibw_nb_get_perf.c bw_common.h common.h bi_dir.h
 
-shmem_bw_atomics_perf_SOURCES = shmem_bw_atomics_perf.c bw_common.h common.h uni_dir.h atomics.h
+shmem_bw_atomics_perf_SOURCES = shmem_bw_atomics_perf.c bw_common.h common.h
 
-shmem_bibw_atomics_perf_SOURCES = shmem_bibw_atomics_perf.c bw_common.h common.h bi_dir.h atomics.h
+shmem_bibw_atomics_perf_SOURCES = shmem_bibw_atomics_perf.c bw_common.h common.h

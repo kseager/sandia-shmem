@@ -58,7 +58,7 @@
   } while (false)
 
 #else
-#define TEST_SHMEM_GET(TYPE)
+#define TEST_SHMEM_GET(TYPE) printf("NOT IN USE\n");
 
 #endif
 
