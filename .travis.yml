@@ -13,7 +13,7 @@ env:
         - SMA_INFO=1
     matrix:
         - # Defaults
-        - SOS_BUILD_OPTS="--disable-mr-scalable --enable-av-map --disable-cxx"
+        - SOS_BUILD_OPTS="--disable-mr-scalable --enable-av-map --disable-cxx --enable-debug"
         - >
           SOS_DISABLE_FORTRAN=1
           SOS_BUILD_OPTS="--disable-fortran --enable-error-checking --enable-remote-virtual-addressing"
